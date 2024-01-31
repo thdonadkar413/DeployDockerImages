@@ -1,0 +1,51 @@
+{
+    "containerDefinitions": [
+        {
+            "name": "Gravity",
+            "image": "waxcree/gravity:v1",
+            "cpu": 0,
+            "portMappings": [
+                {
+                    "name": "testing-v1-22-tcp",
+                    "containerPort": 22,
+                    "hostPort": 22,
+                    "protocol": "tcp",
+                    "appProtocol": "http"
+                }
+            ],
+            "essential": true,
+            "environment": [],
+            "environmentFiles": [],
+            "mountPoints": [],
+            "volumesFrom": [],
+            "ulimits": [],
+            "logConfiguration": {
+                "logDriver": "awslogs",
+                "options": {
+                    "awslogs-create-group": "true",
+                    "awslogs-group": "/ecs/testing-v1",
+                    "awslogs-region": "us-east-1",
+                    "awslogs-stream-prefix": "ecs"
+                },
+                "secretOptions": []
+            }
+        }
+    ],
+    "family": "Gravity",
+    "executionRoleArn": "arn:aws:iam::075151724550:role/ecsTaskExecutionRole",
+    "networkMode": "awsvpc",
+    "volumes": [],
+    "placementConstraints": [],
+    "requiresCompatibilities": [
+        "FARGATE"
+    ],
+    "cpu": "1024",
+    "memory": "3072",
+    "runtimePlatform": {
+        "cpuArchitecture": "ARM64",
+        "operatingSystemFamily": "LINUX"
+    },
+    "tags": [
+        { "key": "Project", "value": "Testing" }
+    ]
+}
