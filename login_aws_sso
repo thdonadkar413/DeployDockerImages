@@ -1,0 +1,143 @@
+import json
+import os
+import boto3
+import random
+import time
+import sys
+from dotenv import load_dotenv
+load_dotenv()
+
+
+# Securely store credentials using environment variables
+AWS_ACCESS_KEY_ID = "ASIARC73EKADIWVP4VAI"
+AWS_SECRET_ACCESS_KEY = "x10dvJRCxNNjRpjoo5W1EbzMTssCXT9q3Tb3M68o"
+AWS_SESSION_TOKEN = "IQoJb3JpZ2luX2VjELT//////////wEaCXVzLWVhc3QtMSJIMEYCIQChBQhwtAZ1ZR+Jn+07f8oo1rKNMnkDYGfRobb4zdlfiAIhAJGxwDpdVgnksLP+RI4AdLw4th0gfCDA+2hUj5ACHY99KuoCCG0QABoMMDc1MTUxNzI0NTUwIgx0PvVoVK5HexrS1OYqxwLK/4IbjbJsZRMWfPw+K7ktIRHXkxT9xm0B7Ae0SO2b0TQI9BI3dihaqZzPoZquFt8mvATRNJhdG62rXs6J+Us4sdfQ+yu9UxRRbUdiaFZqUVJ5+vSEOMQ1DqC72D+X1z1mZ7TYqI95cRrMqZrXlhu9y1yPcragusTf5TEnV+aw3+Azfw7+G8+UBTZ90tHBUG43OcAZ4N6FmCLri+Ep2XiIpgJy2tqg126Nx/9za3TzxEiymywmDmVkafA440Z0/Qm6yloU46E3XA8rR03GmS3b8JPPnhV2R5+s2FcDeKwKXiZVM0hhosXGToUj+iWOqIy1kFNv2IkUe+C/5SukP/nuJWRsHLPlgKdO1wDhOjyq07/VFc+PrNmPDZIP94JK1h1v3DQ7qSr/X4Ds+4nQgRPuYiKsLP0HOWrtvSDlTk3eNACU4TytyTQwqJfCrQY6pgGG71upko3x3RBcT7gfGHPIDYFk48uTBXc38bN6nJodzc46NEnhiKCkPloQGaPqGqCoHAMiK21mAJ8KjgFqFRQo0LuwzeABO3gCABe5BGJ5CWID0tLmM4T021TCXAGSuS4N3wklyzjZyx2rRgeiVr5aUtjKyeFF8Kyw8IQ/ZsdnczNWWyPDAZJdskGOabcuIh/Al5+dJu5QTOxgD/jyJ7jQ5RzbdROC"
+
+# Create a session using SSO credentials
+session = boto3.Session(
+    aws_access_key_id=AWS_ACCESS_KEY_ID,
+    aws_secret_access_key=AWS_SECRET_ACCESS_KEY,
+    aws_session_token=AWS_SESSION_TOKEN
+)
+
+# Get the STS client
+sts_client = session.client('sts')
+
+# Call get_caller_identity to verify login
+try:
+    response = sts_client.get_caller_identity()
+    print("Step 1 completed: User successfully logged in to AWS account")
+    print(f"User ARN: {response['Arn']}")
+except Exception as e:
+    print("Error: Failed to log in to AWS account")
+    print(f"Error message: {e}")
+
+
+# Set the region to us-east-1
+session = boto3.Session(region_name='us-east-1')
+ecs_client = session.client('ecs')
+
+
+# Load the task definition from the JSON file
+try:
+    with open('task_definition.json', 'r') as f:
+        task_definition = json.load(f)
+        print("JSON File read successfully")
+except json.JSONDecodeError as e:
+    print("Error reading JSON file:", e)
+    print("Please check the formatting of task_definition.json")
+
+
+# Create the task definition
+try:
+    response = ecs_client.register_task_definition(**task_definition)
+    print("Step 2 completed: Task definition created successfully")
+    print(f"Task definition ARN: {response['taskDefinition']['taskDefinitionArn']}")
+except Exception as e:
+    print("Error: Failed to create task definition")
+    print(f"Error message: {e}")
+
+
+# Generate a random 4-digit ID for the cluster name
+random_id = random.randint(1000, 9999)
+cluster_name = f"Gravity-{random_id}"
+
+# Set the region (replace with your desired region)
+region_name = 'us-east-1'  # Example region
+
+# Create the ECS client with the specified region
+ecs_client = boto3.client('ecs', region_name=region_name)
+
+# Create the cluster with Fargate infrastructure
+try:
+    response = ecs_client.create_cluster(
+        clusterName=cluster_name,
+        capacityProviders=["FARGATE"],
+        defaultCapacityProviderStrategy=[
+            {
+                "capacityProvider": "FARGATE",
+                "weight": 1  # Use 100% Fargate capacity
+            }
+        ]
+    )
+    print("Step 3 completed: Cluster created successfully")
+    print(f"Cluster name: {cluster_name}")
+    print(f"Cluster ARN: {response['cluster']['clusterArn']}")
+except Exception as e:
+    print("Error: Failed to create cluster")
+    print(f"Error message: {e}")
+
+
+# Set the region (replace with the region where you created the cluster)
+region_name = 'us-east-1'  # Example region
+
+# Create an ECS client
+ecs_client = boto3.client('ecs', region_name=region_name)
+
+# Task definition family from Step 2
+task_definition_family = 'Gravity'  # Replace with the actual family name
+
+# Networking details
+vpc_id = 'vpc-05e80623ab2077751'
+subnet_ids = ['subnet-0c8c448512a78f6bb', 'subnet-0988d2061d41c4821']
+security_group_id = 'sg-01375587314824aa5'
+
+try:
+    start_time = time.time()
+    # Run the task without public IP
+    response = ecs_client.run_task(
+        cluster=cluster_name,
+        launchType='FARGATE',  # Specify Fargate launch type
+        taskDefinition=task_definition_family,
+        count=1,
+        networkConfiguration={
+            'awsvpcConfiguration': {
+                'subnets': subnet_ids,
+                'securityGroups': [security_group_id],
+                'assignPublicIp': 'DISABLED'  # Disable public IP assignment
+            }
+        }
+    )
+    task_arn = response['tasks'][0]['taskArn']
+    print("Task started, monitoring status...")
+    
+    while True:
+        task = ecs_client.describe_tasks(cluster=cluster_name, tasks=[task_arn])['tasks'][0]
+        status = task['lastStatus']
+        sys.stdout.write("\r" + status + " " + "." * (int(time.time() - start_time) % 4))  # Simple animation
+        sys.stdout.flush()
+
+        if status == 'RUNNING':
+            break
+
+        time.sleep(2)  # Check status every 2 seconds
+    
+    print("Step 4 completed: Task started successfully without public IP")
+    print(f"Task ARN: {response['tasks'][0]['taskArn']}")
+    end_time = time.time()
+    total_time = round(end_time - start_time, 2)
+    print(f"\nTask is now running! Total execution time: {total_time} seconds")
+
+except Exception as e:
+    print("Error: Failed to start task")
+    print(f"Error message: {e}")
